@@ -27,3 +27,19 @@ sha256sum harper-f4dcb3862584721b631de4d74e685279d86056f981acea4c45552a67e0031bf
 Harper is an optional plugin: Klein's default build and gates do not need it. It exists to exercise the
 plugin architecture end to end; plugins are to be distributed through a marketplace later, and this
 repository is the interim public store.
+
+## OSV advisory snapshots (`osv-snapshot-<date>`)
+
+klein-rs's supply-chain gate scans every lockfile offline with osv-scanner against one pinned snapshot of the OSV
+vulnerability databases, so the gate's verdict depends on the commit alone. The scheduled workflow
+`.github/workflows/osv-snapshot.yml` publishes one release per week (and on `workflow_dispatch`): tag
+`osv-snapshot-<date>`, asset `osv-snapshot-<sha256>.tar.gz` (the tree `osv-scalibr/<ecosystem>/all.zip` plus
+`SNAPSHOT_DATE`) and its `.sha256`. The release notes record each upstream object's `x-goog-generation`.
+
+Unlike the Harper component, this artefact **cannot be rebuilt from pinned sources**: the upstream bucket is rewritten
+continuously, so a snapshot is only ever *verified* by its digest, never reproduced. Releases are immutable (repository
+setting), so a pinned digest holds for the pin's lifetime. klein-rs pins `OSV_SNAPSHOT_DATE` and `OSV_SNAPSHOT_SHA256`
+in `.github/scripts/workflow-lint-tools.sh`; its checksum-verified installer refuses any other bytes.
+
+Data licences and attribution: `LICENSE-osv-data` (RustSec CC0-1.0; PyPA, Go vulnerability database and GitHub
+advisory database CC-BY-4.0).

@@ -1,0 +1,71 @@
+# Publishes the pinned offline advisory snapshot for klein-rs's supply-chain gate (04.1-G08, D-R185 artefact store).
+# One immutable release per run: tag osv-snapshot-<date>, asset osv-snapshot-<sha256>.tar.gz plus its .sha256.
+# The upstream OSV bucket is rewritten continuously, so these bytes cannot be rebuilt later, only verified by digest.
+# klein-rs pins the date and the digest in .github/scripts/workflow-lint-tools.sh (OSV_SNAPSHOT_DATE / _SHA256).
+name: osv-snapshot
+
+on:
+  schedule:
+    - cron: "17 3 * * 1" # weekly, Monday 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write # the repository's own GITHUB_TOKEN creates the release; no stored secret
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Fetch the OSV databases and publish the snapshot release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # klein-rs's supply-chain gate scans these ecosystems (its Scan rows, xtask/src/supply_chain.rs ECOSYSTEMS).
+          # This is the one copy outside klein-rs; the gate fails by name when a Scan ecosystem has no database here.
+          ECOSYSTEMS: "crates.io PyPI Go"
+        run: |
+          set -euo pipefail
+          date=$(date -u +%F)
+          work=$(mktemp -d)
+          tree=$work/tree
+          notes=$work/notes.md
+          # osv-scanner 2.7.0 reads {OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY}/osv-scalibr/<ecosystem>/all.zip (measured).
+          {
+            echo "OSV offline vulnerability databases for klein-rs's supply-chain gate, fetched $(date -u +%FT%TZ)"
+            echo "from https://osv-vulnerabilities.storage.googleapis.com (layout osv-scalibr/<ecosystem>/all.zip)."
+            echo
+            echo "| Ecosystem | x-goog-generation | Bytes | SHA-256 |"
+            echo "|---|---|---|---|"
+          } > "$notes"
+          for ecosystem in $ECOSYSTEMS; do
+            mkdir -p "$tree/osv-scalibr/$ecosystem"
+            zip=$tree/osv-scalibr/$ecosystem/all.zip
+            curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+              --connect-timeout 10 --max-time 600 --retry 3 --retry-all-errors --retry-delay 5 \
+              --dump-header "$work/$ecosystem.headers" --output "$zip" \
+              "https://osv-vulnerabilities.storage.googleapis.com/$ecosystem/all.zip"
+            generation=$(awk 'tolower($1) == "x-goog-generation:" {print $2}' "$work/$ecosystem.headers" | tr -d '\r' | tail -n 1)
+            echo "| $ecosystem | ${generation:-unknown} | $(wc -c < "$zip") | $(sha256sum "$zip" | awk '{print $1}') |" >> "$notes"
+          done
+          echo "$date" > "$tree/SNAPSHOT_DATE"
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="$date 00:00:00Z" -cf - -C "$tree" . | gzip -n > "$work/snapshot.tar.gz"
+          sha=$(sha256sum "$work/snapshot.tar.gz" | awk '{print $1}')
+          asset=$work/osv-snapshot-$sha.tar.gz
+          mv "$work/snapshot.tar.gz" "$asset"
+          (cd "$work" && sha256sum "osv-snapshot-$sha.tar.gz" > "osv-snapshot-$sha.tar.gz.sha256")
+          {
+            echo
+            echo "Pin rows for klein-rs (.github/scripts/workflow-lint-tools.sh):"
+            echo
+            echo '```'
+            echo "readonly OSV_SNAPSHOT_DATE=\"$date\""
+            echo "readonly OSV_SNAPSHOT_SHA256=\"$sha\""
+            echo '```'
+            echo
+            echo "Data licences: see LICENSE-osv-data in this repository (RustSec CC0-1.0; PyPA, Go vulnerability"
+            echo "database and GitHub advisory database CC-BY-4.0)."
+          } >> "$notes"
+          gh release create "osv-snapshot-$date" "$asset" "$asset.sha256" \
+            --title "osv-snapshot-$date" --notes-file "$notes"
+          gh api "repos/$GH_REPO/releases/tags/osv-snapshot-$date" --jq "{tag_name, immutable, assets: [.assets[].name]}"

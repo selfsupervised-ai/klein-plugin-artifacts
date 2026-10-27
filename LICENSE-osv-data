@@ -1,0 +1,18 @@
+OSV offline vulnerability databases (osv-snapshot-<date> releases of this repository)
+
+The osv-snapshot-<sha256>.tar.gz assets republish, unmodified, the per-ecosystem OSV database archives from
+https://osv-vulnerabilities.storage.googleapis.com/<ECOSYSTEM>/all.zip (https://osv.dev, operated by Google).
+Each archive aggregates advisories from upstream databases under their own licences:
+
+- RustSec Advisory Database (crates.io), https://github.com/rustsec/advisory-db
+  Creative Commons Zero v1.0 Universal (CC0-1.0); dedicated to the public domain.
+- Python Packaging Advisory Database (PyPI), https://github.com/pypa/advisory-database
+  Creative Commons Attribution 4.0 International (CC-BY-4.0).
+- Go Vulnerability Database (Go), https://github.com/golang/vulndb (data served at https://vuln.go.dev)
+  Creative Commons Attribution 4.0 International (CC-BY-4.0).
+- GitHub Advisory Database (GHSA records carried in the OSV archives), https://github.com/github/advisory-database
+  Creative Commons Attribution 4.0 International (CC-BY-4.0).
+
+CC-BY-4.0 attribution: the advisory texts are © their respective authors and the projects above; they are
+redistributed without modification, as fetched on the date recorded in each release's SNAPSHOT_DATE and notes
+(with the upstream object generation of every archive). Licence text: https://creativecommons.org/licenses/by/4.0/
